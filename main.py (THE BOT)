@@ -1,0 +1,76 @@
+import time
+import logging
+from datetime import datetime
+from data_fetcher import DataFetcher
+from strategy import TradingStrategy
+from broker import BrokerClient
+from risk_manager import RiskManager
+from config import TRADING_SYMBOLS, CHECK_INTERVAL
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('trading_bot.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+class TradingBot:
+    def __init__(self):
+        self.broker = BrokerClient()
+        self.is_running = False
+    
+    def analyze_and_trade(self, symbol):
+        try:
+            logger.info(f"Analyzing {symbol}...")
+            
+            data = DataFetcher.get_historical_data(symbol, period='3mo')
+            if data is None or len(data) < 50:
+                logger.warning(f"Insufficient data for {symbol}")
+                return
+            
+            current_price = DataFetcher.get_current_price(symbol)
+            if current_price is None:
+                return
+            
+            signal, details = TradingStrategy.analyze_symbol(data)
+            logger.info(f"{symbol}: {signal} @ ${current_price:.2f}")
+            
+            if signal == 'BUY':
+                account = self.broker.get_account()
+                if account is None:
+                    return
+                
+                stop_loss = RiskManager.calculate_stop_loss(current_price)
+                qty = RiskManager.calculate_position_size(account['buying_power'], current_price, stop_loss)
+                
+                if qty > 0:
+                    order = self.broker.place_market_order(symbol, qty, 'buy')
+                    if order:
+                        logger.info(f"✅ BOUGHT {qty} {symbol} @ ${current_price:.2f}")
+        
+        except Exception as e:
+            logger.error(f"Error with {symbol}: {e}")
+    
+    def run(self):
+        logger.info("🤖 Trading bot started!")
+        self.is_running = True
+        
+        try:
+            while self.is_running:
+                for symbol in TRADING_SYMBOLS:
+                    self.analyze_and_trade(symbol)
+                    time.sleep(2)
+                
+                logger.info(f"⏳ Next check in {CHECK_INTERVAL}s...")
+                time.sleep(CHECK_INTERVAL)
+        
+        except KeyboardInterrupt:
+            logger.info("🛑 Bot stopped")
+            self.is_running = False
+
+if __name__ == "__main__":
+    bot = TradingBot()
+    bot.run()
