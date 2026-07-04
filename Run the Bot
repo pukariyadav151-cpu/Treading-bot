@@ -1,0 +1,61 @@
+import pandas as pd
+import logging
+from ta.momentum import RSIIndicator, MACD
+from ta.trend import SMAIndicator
+
+logger = logging.getLogger(__name__)
+
+class TechnicalIndicators:
+    @staticmethod
+    def calculate_rsi(data, period=14):
+        try:
+            rsi = RSIIndicator(close=data['Close'], window=period)
+            return rsi.rsi()
+        except Exception as e:
+            logger.error(f"Error calculating RSI: {e}")
+            return None
+    
+    @staticmethod
+    def calculate_macd(data, fast=12, slow=26, signal=9):
+        try:
+            macd = MACD(close=data['Close'], window_fast=fast, window_slow=slow, window_sign=signal)
+            return {
+                'macd': macd.macd(),
+                'signal': macd.macd_signal(),
+                'histogram': macd.macd_diff()
+            }
+        except Exception as e:
+            logger.error(f"Error calculating MACD: {e}")
+            return None
+    
+    @staticmethod
+    def calculate_moving_averages(data, periods=[20, 50, 200]):
+        try:
+            ma_data = {}
+            for period in periods:
+                sma = SMAIndicator(close=data['Close'], window=period)
+                ma_data[f'SMA_{period}'] = sma.sma_indicator()
+            return ma_data
+        except Exception as e:
+            logger.error(f"Error calculating SMA: {e}")
+            return None
+    
+    @staticmethod
+    def add_all_indicators(data, rsi_period=14):
+        try:
+            data['RSI'] = TechnicalIndicators.calculate_rsi(data, rsi_period)
+            
+            macd_data = TechnicalIndicators.calculate_macd(data)
+            if macd_data:
+                data['MACD'] = macd_data['macd']
+                data['MACD_Signal'] = macd_data['signal']
+            
+            ma_data = TechnicalIndicators.calculate_moving_averages(data)
+            if ma_data:
+                for key, value in ma_data.items():
+                    data[key] = value
+            
+            return data
+        except Exception as e:
+            logger.error(f"Error adding indicators: {e}")
+            return data
